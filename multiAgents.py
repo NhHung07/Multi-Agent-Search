@@ -77,18 +77,19 @@ class ReflexAgent(Agent):
         "*** YOUR CODE HERE ***"
         ghostPosition = [ghost.getPosition() for ghost in newGhostStates]
         distancePacmanToGhost = [manhattanDistance(newPos, ghostPos) for ghostPos in ghostPosition]
-        minGhostDistance = min(distancePacmanToGhost)
 
         dangerDistance = 5
-        multiplier = 1.5
 
-        if (minGhostDistance < dangerDistance):
-            minGhostDistance *= multiplier
+        capsulePos = successorGameState.getCapsules()
+        minCapsuleDistance = 0
 
         scaredGhostPos = []
         notScaredGhostPos = []
+
         scareModePoint = 100
         scaredMultiplier = 2
+
+        minNotScaredGhostPos = 0
 
         for i in range(len(newScaredTimes)):
             if (newScaredTimes[i] > 0):
@@ -98,22 +99,27 @@ class ReflexAgent(Agent):
         
         if len(notScaredGhostPos) > 0:
             minNotScaredGhostPos = min(notScaredGhostPos)
-        else:
-            minNotScaredGhostPos = 0
 
+        #Prioritize finding scared ghosts
         if len(scaredGhostPos) > 0:
             minScaredGhostPos = min(scaredGhostPos)
 
             return successorGameState.getScore() + scareModePoint - scaredMultiplier * minScaredGhostPos + minNotScaredGhostPos
+        
+        #Only prioritize capsule when there are no scared ghosts
+        if len(capsulePos) > 0:
+            distancePacmanToCapsule = [manhattanDistance(newPos, capsule) for capsule in capsulePos]
+            minCapsuleDistance = min(distancePacmanToCapsule)
 
+        #This statement is to reduce min food distance caculation
         if (successorGameState.getNumFood() < currentGameState.getNumFood()):
-            return successorGameState.getScore() + minGhostDistance
+            return successorGameState.getScore() + minNotScaredGhostPos - minCapsuleDistance
         
         foodPosition = newFood.asList()
         distancePacmanToFood = [manhattanDistance(newPos, foodPos) for foodPos in foodPosition]
         minFoodDistance = min(distancePacmanToFood)
 
-        return successorGameState.getScore() - minFoodDistance + minGhostDistance
+        return successorGameState.getScore() - minFoodDistance + minNotScaredGhostPos - minCapsuleDistance
 
 
 def scoreEvaluationFunction(currentGameState: GameState):
