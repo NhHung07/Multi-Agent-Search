@@ -183,43 +183,55 @@ class MinimaxAgent(MultiAgentSearchAgent):
         "*** YOUR CODE HERE ***"
         def getValueAction(agentIndex: int, depth: int,gameState: GameState):
             if (depth == 0 or gameState.isWin() or gameState.isLose()):
-                return (self.evaluationFunction(gameState), None)
+                return self.evaluationFunction(gameState)
             
             numAgents = gameState.getNumAgents()
+            agentIndex = agentIndex % numAgents
 
+            #Decrease depth after the last ghost moves
             if (agentIndex == numAgents - 1):
                 depth -= 1
 
+            #Maximize for pacman actions
             if (agentIndex == 0):
                 maxValue = -999999
-                bestAction = None
 
                 pacmanLegalActions = gameState.getLegalActions(agentIndex)
                 
                 for action in pacmanLegalActions:
                     pacmanSuccessorState = gameState.generateSuccessor(agentIndex, action)
-                    stateValue = getValueAction((agentIndex + 1) % numAgents, depth, pacmanSuccessorState)[0]
+                    stateValue = getValueAction(agentIndex, depth, pacmanSuccessorState)
 
                     if (maxValue < stateValue):
                         maxValue = stateValue
-                        bestAction = action
 
-                return (maxValue, bestAction)
-            else:
+                return maxValue
+            else: #Minimize for ghost actions
                 minValue = 999999
 
                 ghostLegalActions = gameState.getLegalActions(agentIndex)
 
                 for action in ghostLegalActions:
                     ghostSuccessorState = gameState.generateSuccessor(agentIndex, action)
-                    stateValue = getValueAction((agentIndex + 1) % numAgents, depth, ghostSuccessorState)[0]
+                    stateValue = getValueAction(agentIndex, depth, ghostSuccessorState)
 
                     if (minValue > stateValue):
                         minValue = stateValue
 
-                return (minValue, None)
-            
-        return getValueAction(0, self.depth, gameState)[1]      
+                return minValue
+
+        maxValue = -99999
+        bestAction = None
+        for action in gameState.getLegalActions(0):
+            successorState = gameState.generateSuccessor(0, action)
+            stateValue = getValueAction(1, self.depth, successorState)
+
+            if (maxValue < stateValue):
+                maxValue = stateValue
+                bestAction = action
+        
+        return bestAction
+
 
 class AlphaBetaAgent(MultiAgentSearchAgent):
     """
