@@ -74,20 +74,23 @@ class ReflexAgent(Agent):
         newGhostStates = successorGameState.getGhostStates()
         newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
 
-        if successorGameState.isWin():
-            return float('inf')
-        if successorGameState.isLose():
-            return -float('inf')
+        # Nếu nước đi này thắng -> buộc phải đi, Nếu nước đi này thua -> tuyết đối tránh
+        if currentGameState.isWin():
+            return currentGameState.getScore() + 100000
+        if currentGameState.isLose():
+            return currentGameState.getScore() - 100000
 
+        # Lấy điểm số cơ bản của trạng thái kế tiếp để làm nền tảng cho hàm đánh giá
         score = successorGameState.getScore()
 
-        # Prefer moving toward the nearest food.
+        # Ưu tiên di chuyển về phía thức ăn gần nhất
         foodList = newFood.asList()
         if foodList:
-            minFoodDist = min(manhattanDistance(newPos, foodPos) for foodPos in foodList)
+            # Tìm khoảng cách Manhattan ngắn nhất tới 1 viên thức ăn
+            minFoodDist = min(manhattanDistance(newPos, foodPos) for foodPos in foodList)   
             score += 1.0 / (minFoodDist + 1)
 
-        # Strongly avoid active ghosts, chase scared ghosts.
+        # Tránh ma đang hoạt động, đuổi ma đang sợ hãi
         for i, ghostState in enumerate(newGhostStates):
             ghostPos = ghostState.getPosition()
             dist = manhattanDistance(newPos, ghostPos)
@@ -98,7 +101,7 @@ class ReflexAgent(Agent):
                     score -= 10
                 score -= 1.5 / (dist + 1)
 
-        # Prefer states with less food left.
+        # Trừ lượng nhỏ điểm cho thức ăn còn lại để khuyến khích Pacman ăn nhanh
         score -= 0.1 * len(foodList)
         return score
 
@@ -163,30 +166,40 @@ class MinimaxAgent(MultiAgentSearchAgent):
         numAgents = gameState.getNumAgents()
 
         def value(state, depth, agentIndex):
+            # Điều kiện dừng: đạt độ sâu tối đa hoặc trạng thái thắng/thua
             if depth == self.depth or state.isWin() or state.isLose():
                 return self.evaluationFunction(state)
 
             legalActions = state.getLegalActions(agentIndex)
+            # Xử lý nếu không có hành động hợp lệ để tránh lỗi bước tính max/min trên danh sách rỗng
             if not legalActions:
                 return self.evaluationFunction(state)
 
+            # Xác định chỉ số tác nhân tiếp theo và độ sâu tiếp theo
             nextAgent = (agentIndex + 1) % numAgents
             nextDepth = depth + 1 if nextAgent == 0 else depth
 
+
             if agentIndex == 0:
+                # Nút Max dành cho Pacman
                 return max(
                     value(state.generateSuccessor(agentIndex, action), nextDepth, nextAgent)
                     for action in legalActions
                 )
+            # Nút Min dành cho ma
             return min(
                 value(state.generateSuccessor(agentIndex, action), nextDepth, nextAgent)
                 for action in legalActions
             )
 
+        # Khỏi tạo biến bestScore và bestAction để theo dõi nước đi tốt nhất
         bestScore = -float('inf')
         bestAction = Directions.STOP
+        
         for action in gameState.getLegalActions(0):
+            # Gọi đệ quy cho con ma đầu tiên (agentIndex=1) và độ sâu ban đầu là 0
             score = value(gameState.generateSuccessor(0, action), 0, 1 % numAgents)
+            # Cập nhật bestScore và bestAction nếu tìm thấy nước đi tốt hơn
             if score > bestScore:
                 bestScore = score
                 bestAction = action
@@ -204,19 +217,28 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         numAgents = gameState.getNumAgents()
 
         def value(state, depth, agentIndex, alpha, beta):
+            # Điều kiện dừng: đạt độ sâu tối đa hoặc trạng thái thắng/thua
             if depth == self.depth or state.isWin() or state.isLose():
                 return self.evaluationFunction(state)
 
             legalActions = state.getLegalActions(agentIndex)
+            # Xử lý nếu không có hành động hợp lệ để tránh lỗi bước tính max/min trên danh sách rỗng
             if not legalActions:
                 return self.evaluationFunction(state)
 
+            # Xác định chỉ số tác nhân tiếp theo và độ sâu tiếp theo
             nextAgent = (agentIndex + 1) % numAgents
             nextDepth = depth + 1 if nextAgent == 0 else depth
 
+            # Nút Max dành cho Pacman
             if agentIndex == 0:
+                # Khởi tạo giá trị v với -inf để tìm max
                 v = -float('inf')
                 for action in legalActions:
+                    # Tính điểm của nước đi hiện tại bằng cách:
+                    # 1. Mô phỏng trạng thái bàn cờ tiếp theo (generateSuccessor)
+                    # 2. Gọi đệ quy hàm value() để dự đoán điểm số cuối cùng của nhánh tương lai này
+                    # 3. So sánh điểm vừa dự đoán với kỷ lục hiện tại (v) và lưu lại giá trị lớn nhất (max)
                     v = max(
                         v,
                         value(
@@ -227,13 +249,21 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
                             beta,
                         ),
                     )
+                    # Điều kiện cắt tỉa alpha-beta: nếu v đã lớn hơn beta, không cần tiếp tục đánh giá các hành động còn lại
                     if v > beta:
                         return v
+                    # Cập nhật alpha nếu v tốt hơn alpha hiện tại
                     alpha = max(alpha, v)
                 return v
 
+            # Nút Min dành cho ma
+            # Khởi tạo giá trị v với +inf để tìm min
             v = float('inf')
             for action in legalActions:
+                # Tính điểm của nước đi hiện tại bằng cách:
+                # 1. Mô phỏng trạng thái bàn cờ tiếp theo (generateSuccessor)
+                # 2. Gọi đệ quy hàm value() để dự đoán điểm số cuối cùng của nhánh tương lai này
+                # 3. So sánh điểm vừa dự đoán với kỷ lục hiện tại (v) và lưu lại giá trị nhỏ nhất (min)
                 v = min(
                     v,
                     value(
@@ -244,20 +274,27 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
                         beta,
                     ),
                 )
+                # Điều kiện cắt tỉa alpha-beta: nếu v đã nhỏ hơn alpha, không cần tiếp tục đánh giá các hành động còn lại
                 if v < alpha:
                     return v
+                # Cập nhật beta nếu v tốt hơn beta hiện tại
                 beta = min(beta, v)
             return v
 
+        # Khởi tạo alpha và beta, cũng như biến bestScore và bestAction để theo dõi nước đi tốt nhất
         alpha = -float('inf')
         beta = float('inf')
         bestScore = -float('inf')
         bestAction = Directions.STOP
+
         for action in gameState.getLegalActions(0):
-            score = value(gameState.generateSuccessor(0, action), 0, 1 % gameState.getNumAgents(), alpha, beta)
+            # Gọi đệ quy cho con ma đầu tiên (agentIndex=1) và độ sâu ban đầu là 0, đồng thời truyền alpha và beta
+            score = value(gameState.generateSuccessor(0, action), 0, 1 % numAgents, alpha, beta)
+            # Cập nhật bestScore và bestAction nếu tìm thấy nước đi tốt hơn
             if score > bestScore:
                 bestScore = score
                 bestAction = action
+            # Cập nhật alpha sau khi đánh giá nước đi của Pacman
             alpha = max(alpha, bestScore)
         return bestAction
 
@@ -276,32 +313,43 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         numAgents = gameState.getNumAgents()
 
         def value(state, depth, agentIndex):
+            # Điều kiện dừng: đạt độ sâu tối đa hoặc trạng thái thắng/thua
             if depth == self.depth or state.isWin() or state.isLose():
                 return self.evaluationFunction(state)
 
             legalActions = state.getLegalActions(agentIndex)
+            # Xử lý nếu không có hành động hợp lệ để tránh lỗi bước tính max/min trên danh sách rỗng
             if not legalActions:
                 return self.evaluationFunction(state)
 
+            # Xác định chỉ số tác nhân tiếp theo và độ sâu tiếp theo
             nextAgent = (agentIndex + 1) % numAgents
             nextDepth = depth + 1 if nextAgent == 0 else depth
 
+            # Nút Max dành cho Pacman
             if agentIndex == 0:
                 return max(
                     value(state.generateSuccessor(agentIndex, action), nextDepth, nextAgent)
                     for action in legalActions
                 )
 
+            # Tính xác suất cho mỗi hành động của ma (giả sử chọn ngẫu nhiên đồng đều)
             probability = 1.0 / len(legalActions)
+            # Nút Expectimax dành cho ma: tính giá trị kỳ vọng bằng cách lấy trung bình có trọng số của các điểm số dự đoán từ các hành động hợp lệ
             return sum(
                 probability * value(state.generateSuccessor(agentIndex, action), nextDepth, nextAgent)
                 for action in legalActions
             )
 
+        # Khởi tạo biến bestScore và bestAction để theo dõi nước đi tốt nhất
         bestScore = -float('inf')
         bestAction = Directions.STOP
+
         for action in gameState.getLegalActions(0):
+            # Gọi đệ quy cho con ma đầu tiên (agentIndex=1) và độ sâu ban đầu là 0
             score = value(gameState.generateSuccessor(0, action), 0, 1 % numAgents)
+            print(f"Action: {action}, Score: {score}")
+            # Cập nhật bestScore và bestAction nếu tìm thấy nước đi tốt hơn
             if score > bestScore:
                 bestScore = score
                 bestAction = action
@@ -317,37 +365,56 @@ def betterEvaluationFunction(currentGameState: GameState):
     ghosts and leaving many foods/capsules on the board. Returns very large
     values on win/lose terminal states.
     """
-    if currentGameState.isWin():
-        return float('inf')
-    if currentGameState.isLose():
-        return -float('inf')
 
+    # Nếu nước đi này thắng -> buộc phải đi, Nếu nước đi này thua -> tuyết đối tránh
+    if currentGameState.isWin():
+        return currentGameState.getScore() + 100000
+    if currentGameState.isLose():
+        return currentGameState.getScore() - 100000
+
+    # Lấy các thông tin cần thiết từ trạng thái hiện tại để tính toán điểm số
     pacmanPos = currentGameState.getPacmanPosition()
     foodList = currentGameState.getFood().asList()
     ghostStates = currentGameState.getGhostStates()
     capsules = currentGameState.getCapsules()
 
+    # Bắt đầu với điểm số cơ bản của trạng thái hiện tại
     score = currentGameState.getScore()
 
+    # Mục tiêu chính chính là thu thập thức ăn
     if foodList:
         minFoodDist = min(manhattanDistance(pacmanPos, foodPos) for foodPos in foodList)
-        score += 1.5 / (minFoodDist + 1)
-        score -= 4.0 * len(foodList)
+        # Thưởng lớn cho việc di chuyển gần thức ăn và phạt nặng thức ăn còn thừa để Pacman di chuyển tối ưu hơn
+        score += 4.0 / (minFoodDist + 1)
+        score -= 8.0 * len(foodList)
+    else:
+        # Bonus để dọn sạch map
+        score += 1000  
 
+    # Ưu tiên cao cho viên năng lượng nếu nó xuất hiện trên bản đồ 
     if capsules:
         minCapsuleDist = min(manhattanDistance(pacmanPos, capPos) for capPos in capsules)
-        score += 1.0 / (minCapsuleDist + 1)
-        score -= 15.0 * len(capsules)
+        score += 4.0 / (minCapsuleDist + 1)
+        score -= 50.0 * len(capsules)
 
+    # Đánh giá mối đe dạo từ ma
     for ghostState in ghostStates:
         ghostPos = ghostState.getPosition()
         dist = manhattanDistance(pacmanPos, ghostPos)
+        
         if ghostState.scaredTimer > 0:
-            score += 3.0 / (dist + 1)
+            # Ưu tiên cao nhất cho việc đuổi ma đang sợ hãi
+            score += 10.0 / (dist + 1)
         else:
+            # Phân vùng tránh ma để thuật toán hiệu quả hơn 
             if dist <= 1:
-                score -= 200
-            score -= 4.0 / (dist + 1)
+                score -= 500
+            elif dist == 2:
+                score -= 100
+            elif dist == 3:
+                score -= 25
+            else:
+                score -= 3.0 / (dist + 1)
 
     return score
 
