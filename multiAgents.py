@@ -348,7 +348,7 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         for action in gameState.getLegalActions(0):
             # Gọi đệ quy cho con ma đầu tiên (agentIndex=1) và độ sâu ban đầu là 0
             score = value(gameState.generateSuccessor(0, action), 0, 1 % numAgents)
-            print(f"Action: {action}, Score: {score}")
+            # print(f"Action: {action}, Score: {score}")
             # Cập nhật bestScore và bestAction nếu tìm thấy nước đi tốt hơn
             if score > bestScore:
                 bestScore = score
