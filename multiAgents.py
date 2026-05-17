@@ -75,10 +75,10 @@ class ReflexAgent(Agent):
         newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
 
         # Nếu nước đi này thắng -> buộc phải đi, Nếu nước đi này thua -> tuyết đối tránh
-        if currentGameState.isWin():
-            return currentGameState.getScore() + 100000
-        if currentGameState.isLose():
-            return currentGameState.getScore() - 100000
+        if successorGameState.isWin():
+            return successorGameState.getScore() + 100000
+        if successorGameState.isLose():
+            return successorGameState.getScore() - 100000
 
         # Lấy điểm số cơ bản của trạng thái kế tiếp để làm nền tảng cho hàm đánh giá
         score = successorGameState.getScore()
@@ -418,5 +418,114 @@ def betterEvaluationFunction(currentGameState: GameState):
 
     return score
 
+def riskAwareEvaluationFunction(currentGameState: GameState):
+    
+    # Nếu nước đi này thắng -> buộc phải đi, Nếu nước đi này thua -> tuyết đối tránh
+    if currentGameState.isWin():
+        return currentGameState.getScore() + 100000
+    if currentGameState.isLose():
+        return currentGameState.getScore() - 100000
+
+    # Lấy các thông tin cần thiết từ trạng thái hiện tại để tính toán điểm số
+    pacmanPos = currentGameState.getPacmanPosition()
+    foodList = currentGameState.getFood().asList()
+    ghostStates = currentGameState.getGhostStates()
+    capsules = currentGameState.getCapsules()
+    walls = currentGameState.getWalls()
+
+    # Hàm BFS để tính khoảng cách thực tế trong mê cung từ vị trí hiện tại đến tất cả các vị trí khác
+    def computeMazeDistances(startPos):
+        queue = util.Queue()
+        queue.push(startPos)
+        distances = {startPos: 0}
+
+        while not queue.isEmpty():
+            x, y = queue.pop()
+            baseDist = distances[(x, y)]
+            for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                nx, ny = x + dx, y + dy
+                # Nếu là tường thì bỏ qua
+                if walls[nx][ny]:
+                    continue
+                # Nếu đã tính khoảng cách đến vị trí này rồi thì bỏ qua
+                if (nx, ny) in distances:
+                    continue
+                distances[(nx, ny)] = baseDist + 1
+                queue.push((nx, ny))
+        return distances
+
+    # Tạo ra 1 distMap từ Pacman đến mọi nơi
+    distMap = computeMazeDistances(pacmanPos)
+
+    # Hàm con để trả về khoảng cách từ Pacman đến 1 điểm
+    def mazeDistance(toPos):
+        return distMap.get(toPos)
+
+    # Hàm con để tìm khoảng cách nhỏ nhất từ Pacman đến một tập hợp các vị trí, bỏ qua những vị trí không thể tiếp cận được
+    def minMazeDistance(positions):
+        if not positions:
+            return None
+        distances = [mazeDistance(pos) for pos in positions if mazeDistance(pos) is not None]
+        return min(distances) if distances else None
+
+    # Bắt đầu với điểm số cơ bản của trạng thái hiện tại
+    score = currentGameState.getScore()
+
+    # Tìm khoảng cách thực tế đến thức ăn gần nhất
+    minFoodDist = minMazeDistance(foodList)
+    # Thưởng lớn cho việc di chuyển gần thức ăn và phạt nặng thức ăn còn thừa để Pacman di chuyển tối ưu hơn
+    if minFoodDist is not None:
+        score += 3.0 / (minFoodDist + 1)
+        score -= 4.0 * len(foodList)
+
+    # Tìm khoảng cách thực tế đến viên năng lượng gần nhất
+    minCapsuleDist = minMazeDistance(capsules)
+    # Ưu tiên cao cho viên năng lượng nhưng không quá tham lam
+    if minCapsuleDist is not None:
+        score += 2.0 / (minCapsuleDist + 1)
+        score -= 20.0 * len(capsules)
+
+    # Tạo mảng lưu khoảng cách đến các ma 
+    activeGhostDists = []
+    for ghostState in ghostStates:
+        ghostPos = ghostState.getPosition()
+        dist = mazeDistance(ghostPos)
+        # Nếu ma này không thể tiếp cận được thì bỏ qua nó, tránh việc đánh giá sai do khoảng cách vô hạn hoặc không xác định
+        if dist is None:
+            continue
+        # Ưu tiên đuổi ma đang sợ hãi
+        if ghostState.scaredTimer > 0:
+            score += 8.0 / (dist + 1)
+        else:
+            # Trừ điểm trên tất cả ma đang hoạt động để đo lường áp lực
+            activeGhostDists.append(dist)
+            score -= 3.0 / (dist + 0.5)
+            # Nếu dưới 2 bước trừ cực nặng
+            if dist <= 2:
+                score -= 60.0 * (3 - dist)
+
+    # Trừ điểm mạnh dựa trên con ma gần nhất để ưu tiên sinh tồn là tuyệt đối
+    if activeGhostDists:
+        minActiveDist = min(activeGhostDists)
+        score -= 12.0 / (minActiveDist + 0.1)
+
+    # Lây danh sách các hướng Pacman có thể di chuyển trừ STOP
+    legalMoves = currentGameState.getLegalActions(0)
+    movable = [action for action in legalMoves if action != Directions.STOP]
+    mobility = len(movable)
+    # Chui vào ngõ cụt phạt nặng
+    if mobility <= 1:
+        score -= 25.0
+    # Hành lang hẹp không có ngã rẽ phạt nhẹ hơn
+    elif mobility == 2:
+        score -= 8.0
+
+    # Khi bị truy đuổi thì không được đi vào ngõ cụt
+    if activeGhostDists and min(activeGhostDists) <= 4 and mobility <= 2:
+        score -= 40.0
+
+    return score
+
 # Abbreviation
 better = betterEvaluationFunction
+riskAware = riskAwareEvaluationFunction

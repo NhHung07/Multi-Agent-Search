@@ -4,7 +4,7 @@
 
 |Tên thành viên | Vai trò | Phụ trách |
 |--------|--------|--------|
-|Trần Nhật Hưng | Leader | Cài đặt betterEvaluationFunction |  
+|Trần Nhật Hưng | Leader | Cài đặt betterEvaluationFunction, rickAwareEvaluationFunction |  
 | Vũ Hải Linh | Thành viên | Cài đặt Reflex Agent, Minimax |  
 | Phạm Đức Hùng | Thành viên | Cài đặt Expectimax |   
 | Nguyễn Duy Đức Minh | Thành viên | Cài đặt Alpha-Beta Pruning |
@@ -41,7 +41,7 @@ Hàm đánh giá được thiết kế để tính điểm cho mỗi hành độ
 -   **Trạng thái thắng/thua**: Các trạng thái kết thúc game (thắng hoặc thua) được gán giá trị điểm rất lớn hoặc rất nhỏ để đảm bảo tác nhân sẽ chọn nước đi chiến thắng và tránh nước đi dẫn đến thất bại.
 
 ```python
-# Trích đoạn từ multiAgents.py
+
 def evaluationFunction(self, currentGameState: GameState, action):
     # ... (code trích xuất thông tin)
     score = successorGameState.getScore()
@@ -135,7 +135,7 @@ Minimax là thuật toán tìm kiếm đối kháng cho các trò chơi hai ngư
 4.  Giá trị này được truyền ngược lên cây để xác định nước đi tốt nhất cho Pacman ở trạng thái gốc.
 
 ```python
-# Trích đoạn từ multiAgents.py
+
 class MinimaxAgent(MultiAgentSearchAgent):
     def getAction(self, gameState: GameState):
         # ...
@@ -200,7 +200,7 @@ Thuật toán duy trì hai giá trị trong quá trình duyệt cây:
 Việc cắt tỉa này giúp thuật toán tìm kiếm sâu hơn trong cùng một khoảng thời gian, hoặc tìm ra quyết định nhanh hơn ở cùng một độ sâu so với Minimax.
 
 ```python
-# Trích đoạn từ multiAgents.py
+
 class AlphaBetaAgent(MultiAgentSearchAgent):
     def getAction(self, gameState: GameState):
         # ...
@@ -268,7 +268,7 @@ Expectimax được sử dụng khi các đối thủ không hành động một
 Thuật toán này phù hợp với một mô hình thực tế hơn, nơi các ma không phải lúc nào cũng đưa ra quyết định hoàn hảo để chống lại Pacman.
 
 ```python
-# Trích đoạn từ multiAgents.py
+
 class ExpectimaxAgent(MultiAgentSearchAgent):
     def getAction(self, gameState: GameState):
         # ...
@@ -391,6 +391,72 @@ Question q5: 6/6
 Total: 6/6
 ```
 
+---
+
+## 6. Hàm đánh giá nhận biết rủi ro (`riskAwareEvaluationFunction`)
+
+Đây là một phiên bản nâng cao hơn của hàm đánh giá, tập trung vào việc tính toán **khoảng cách thực tế trong mê cung (maze distance)** thay vì khoảng cách Manhattan. Điều này mang lại một sự hiểu biết chính xác hơn về bản đồ và các mối đe dọa.
+
+### Các cải tiến chính
+
+1.  **Sử dụng Khoảng cách Mê cung (Maze Distance)**:
+    -   Thay vì dùng `manhattanDistance` (đường chim bay), hàm này sử dụng thuật toán **Tìm kiếm theo chiều rộng (BFS)** để tính toán khoảng cách ngắn nhất thực tế giữa hai điểm, có tính đến các bức tường. Điều này giúp Pacman không bị "lừa" bởi những con ma ở gần nhưng thực tế lại bị ngăn cách bởi tường.
+    -   Một `distMap` được tạo ra từ vị trí của Pacman đến mọi điểm khác trên bản đồ, giúp tối ưu hóa việc truy vấn khoảng cách.
+
+2.  **Đánh giá Rủi ro từ Ma một cách Tinh vi hơn**:
+    -   **Áp lực từ nhiều ma**: Hàm tính toán điểm phạt dựa trên khoảng cách đến *tất cả* các ma đang hoạt động, không chỉ con ma gần nhất. Điều này giúp Pacman nhận biết được tình huống bị bao vây.
+    -   **Phạt nặng khi ở gần**: Nếu khoảng cách đến ma đang hoạt động nhỏ hơn hoặc bằng 2, một khoản điểm phạt rất lớn được áp dụng (`-60.0 * (3 - dist)`), khiến Pacman phải ưu tiên việc thoát khỏi nguy hiểm ngay lập tức.
+    -   **Ưu tiên sinh tồn**: Một điểm phạt bổ sung (`-12.0 / (minActiveDist + 0.1)`) được áp dụng dựa trên khoảng cách đến con ma gần nhất, nhấn mạnh rằng việc sống sót là ưu tiên hàng đầu.
+
+3.  **Nhận biết Ngõ cụt (Mobility Awareness)**:
+    -   Hàm đánh giá "sự linh hoạt" (mobility) của Pacman bằng cách đếm số lượng nước đi hợp lệ (không tính `STOP`).
+    -   Nếu Pacman chỉ có 1 hoặc 2 nước đi (dấu hiệu của ngõ cụt hoặc hành lang hẹp), nó sẽ bị trừ điểm.
+    -   Đặc biệt, nếu đang bị ma truy đuổi ở khoảng cách gần và đồng thời đang ở trong một khu vực kém linh hoạt, điểm phạt sẽ rất nặng, buộc Pacman phải tìm đường thoát.
+
+### So sánh với `betterEvaluationFunction`
+
+-   **Độ chính xác**: `riskAwareEvaluationFunction` chính xác hơn nhiều trong việc đánh giá khoảng cách và rủi ro thực tế.
+-   **Chi phí tính toán**: Việc chạy BFS để tính `mazeDistance` ở mỗi trạng thái làm cho hàm này tốn nhiều tài nguyên tính toán hơn so với việc dùng `manhattanDistance`.
+-   **Hành vi**: Pacman với hàm này có xu hướng chơi "an toàn" hơn, cẩn trọng hơn khi di chuyển vào các khu vực hẹp và rất nhạy cảm với vị trí của ma.
+
+```python
+
+def riskAwareEvaluationFunction(currentGameState: GameState):
+    # ... (BFS để tính maze distance) ...
+
+    # Tìm khoảng cách thực tế đến thức ăn gần nhất
+    minFoodDist = minMazeDistance(foodList)
+    if minFoodDist is not None:
+        score += 3.0 / (minFoodDist + 1)
+        score -= 4.0 * len(foodList)
+
+    # ... (Đánh giá khoảng cách đến viên năng lượng) ...
+
+    # Đánh giá mối đe dọa từ ma
+    activeGhostDists = []
+    for ghostState in ghostStates:
+        dist = mazeDistance(ghostState.getPosition())
+        # ...
+        if ghostState.scaredTimer > 0:
+            score += 8.0 / (dist + 1)
+        else:
+            activeGhostDists.append(dist)
+            score -= 3.0 / (dist + 0.5)
+            if dist <= 2:
+                score -= 60.0 * (3 - dist)
+    
+    # Phạt dựa trên con ma gần nhất
+    if activeGhostDists:
+        minActiveDist = min(activeGhostDists)
+        score -= 12.0 / (minActiveDist + 0.1)
+
+    # Phạt khi vào ngõ cụt
+    mobility = len([action for action in currentGameState.getLegalActions(0) if action != Directions.STOP])
+    if mobility <= 1:
+        score -= 25.0
+    # ...
+    return score
+```
 ---
 
 ## Hướng dẫn chạy chương trình
