@@ -186,34 +186,50 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         All ghosts should be modeled as choosing uniformly at random from their
         legal moves.
         """
-        "*** YOUR CODE HERE ***"
-        def expectimax(state, agentIndex, depth):
-            if state.isWin() or state.isLose() or depth == self.depth:
+        numAgents = gameState.getNumAgents()
+
+        def value(state, depth, agentIndex):
+            # Điều kiện dừng: đạt độ sâu tối đa hoặc trạng thái thắng/thua
+            if depth == self.depth or state.isWin() or state.isLose():
                 return self.evaluationFunction(state)
 
-            nextAgent = (agentIndex + 1) % state.getNumAgents()
+            legalActions = state.getLegalActions(agentIndex)
+            # Xử lý nếu không có hành động hợp lệ để tránh lỗi bước tính max/min trên danh sách rỗng
+            if not legalActions:
+                return self.evaluationFunction(state)
+
+            # Xác định chỉ số tác nhân tiếp theo và độ sâu tiếp theo
+            nextAgent = (agentIndex + 1) % numAgents
             nextDepth = depth + 1 if nextAgent == 0 else depth
-            
-            actions = state.getLegalActions(agentIndex)
-            successors = [state.generateSuccessor(agentIndex, action) for action in actions]
 
+            # Nút Max dành cho Pacman
             if agentIndex == 0:
-                return max([expectimax(succ, nextAgent, nextDepth) for succ in successors])
+                return max(
+                    value(state.generateSuccessor(agentIndex, action), nextDepth, nextAgent)
+                    for action in legalActions
+                )
 
-            else:
-                scores = [expectimax(succ, nextAgent, nextDepth) for succ in successors]
-                return sum(scores) / len(actions)
+            # Tính xác suất cho mỗi hành động của ma (giả sử chọn ngẫu nhiên đồng đều)
+            probability = 1.0 / len(legalActions)
+            # Nút Expectimax dành cho ma: tính giá trị kỳ vọng bằng cách lấy trung bình có trọng số của các điểm số dự đoán từ các hành động hợp lệ
+            return sum(
+                probability * value(state.generateSuccessor(agentIndex, action), nextDepth, nextAgent)
+                for action in legalActions
+            )
 
-        bestAction = None
-        maxScore = float('-inf')
+        # Khởi tạo biến bestScore và bestAction để theo dõi nước đi tốt nhất
+        bestScore = -float('inf')
+        bestAction = Directions.STOP
+
         for action in gameState.getLegalActions(0):
-            score = expectimax(gameState.generateSuccessor(0, action), 1, 0)
-            if score > maxScore:
-                maxScore = score
+            # Gọi đệ quy cho con ma đầu tiên (agentIndex=1) và độ sâu ban đầu là 0
+            score = value(gameState.generateSuccessor(0, action), 0, 1 % numAgents)
+            # print(f"Action: {action}, Score: {score}")
+            # Cập nhật bestScore và bestAction nếu tìm thấy nước đi tốt hơn
+            if score > bestScore:
+                bestScore = score
                 bestAction = action
-        
         return bestAction
-
 def betterEvaluationFunction(currentGameState: GameState):
     """
     Your extreme ghost-hunting, pellet-nabbing, food-gobbling, unstoppable
